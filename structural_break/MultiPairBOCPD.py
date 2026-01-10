@@ -3,36 +3,31 @@ import numpy as np
 import pandas as pd
 
 class MultiPairBOCPD:
-    def __init__(self, pairs, hazard, distribution_cls):
+    def __init__(self, pairs, bocpd_factory, cp_threshold=0.5):
         """
-        pairs: list of pair names, e.g. [("AAPL","MSFT"), ("XOM","CVX")]
-        hazard: hazard function
-        distribution_cls: callable returning a fresh likelihood model
+        pairs: list of tuples, e.g. [('AAPL','MSFT'), ('XOM','CVX')]
+        bocpd_factory: callable -> fresh BOCPD instance
+        cp_threshold: probability threshold for declaring CP
         """
-        self.models = {}
-        self.cp_probs = {}
-        self.cp_flags = {}
+        self.pairs = pairs
+        self.cp_threshold = cp_threshold
 
-        for pair in pairs:
-            self.models[pair] = BOCPD(
-                hazard=hazard,
-                distribution=distribution_cls()
-            )
-            self.cp_probs[pair] = []
-            self.cp_flags[pair] = []
+        self.models = {p: bocpd_factory() for p in pairs}
+        self.cp_probs = {p: [] for p in pairs}
+        self.cp_flags = {p: [] for p in pairs}
+        self.last_cp = {p: 0 for p in pairs}
 
-    def update(self, pair, x_t):
-        """
-        Update BOCPD for a single pair
-        """
+    def update(self, pair, x_t, t):
         model = self.models[pair]
         model.update(x_t)
 
-        # Probability of change point at time t
         cp_prob = model.change_probs[-1]
         self.cp_probs[pair].append(cp_prob)
 
-        # Binary flag (optional)
-        self.cp_flags[pair].append(cp_prob > 0.5)
+        cp_flag = cp_prob > self.cp_threshold
+        self.cp_flags[pair].append(cp_flag)
+
+        if cp_flag:
+            self.last_cp[pair] = t
 
         return cp_prob
