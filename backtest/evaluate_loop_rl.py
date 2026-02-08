@@ -1,155 +1,135 @@
 # ============================================================
 #  EVALUATION LOOP
 # ============================================================
-import os, json
-import torch
-import torch.nn as nn
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from tqdm import trange
-import torch.optim as optim
+import torch
 import math
-import random
+from collections import defaultdict
 
-from util.running_mean_std import RunningMeanStd
 from util.seed_random import seed_random
-from structural_break.bocpd import BOCPD
-from structural_break.hazard import ConstantHazard
-from structural_break.distribution import StudentT
-from ml_dl_models.rnn_vae import VAEEncoder, vae_loss
-from ml_dl_models.actor_critic import Actor
-from ml_dl_models.actor_critic import Critic
-from util.weighted_replay_buffer import WeightedReplayBuffer
+from metrics.stats import compute_max_drawdown as max_drawdown
 from util.models_io import load_RLmodels
 
 def evaluate_loop_rl(
-          stream,
-          bocpd_params,
-          vae_params,
-          rl_params,
-          joint_params,
-          total_steps = 100000,
-          load_dir="checkpoints",
-          device="cpu",
-          exploration=False,
-          stop_loss_threshold=-0.02, #same stop-loss threshold as training (e.g., −2%)
-          stop_loss_penalty=0.001,    # optional penalty for hitting stop-loss
-          seed: int = 42
+    spreads: dict,   # {pair_name: pd.Series}
+    bocpd_params,
+    vae_params,
+    rl_params,
+    joint_params,
+    use_trained_rms=False, # For OOS this should be True
+    load_dir="checkpoints",
+    device="cpu",
+    stop_loss_threshold=-0.02,
+    stop_loss_penalty=0.001,
+    seed: int = 42
 ):
-    """
-    Evaluate a trained RL policy and encoder with VAE + BOCPD context.
-    Automatically loads saved models using load_all_models().
-
-    Args:
-        stream: pd.Series or np.ndarray of returns
-        bocpd_params, vae_params, rl_params, joint_params: dict with parameters
-        total_steps: maximum time steps limit 
-        load_dir: path to the saved models directory (where save_all_models() stored them)
-        device: 'cpu' or 'cuda'
-        exploration: used if stochasticity is required for the evaluation loop
-        stop_loss_threshold, stop_loss_penalty: used for early stopping
-        seed: for random seeding
-
-    Returns:
-        dict with change probabilities, most likely run lengths estimates, changepoint flags, 
-        reconstructed outputs of VAE, portfolio returns, actions, and portfolio returns series
-    """
-    if isinstance(stream, pd.Series):
-        data = stream.values  # just the spread values
-        dates = stream.index    # keep dates for later if you want plotting
-    else:
-        data = np.asarray(stream)
-        dates = None
     seed_random(seed, device=device)
-    state_window = joint_params['state_window']
-    seq_len_for_vae = vae_params['vae_seq_len']
-    tc = joint_params.get('transaction_cost', 0.0)
-    state_dim = state_window
+    pairs = list(spreads.keys())
+    n_pairs = len(pairs)
 
-    vae_encoder = VAEEncoder(
-                          input_dim=vae_params['input_dim'],
-                          hidden_dim=vae_params['hidden_dim'],
-                          z_dim=vae_params['latent_dim'],
-                          seq_len=seq_len_for_vae
-                          ).to(device)
+    # ----------------------------
+    # Align data
+    # ----------------------------
+    min_len = min(len(spreads[p]) for p in pairs)
+    data = {p: spreads[p].values[:min_len] for p in pairs}
+
+    # ----------------------------
+    # Models (already trained)
+    # ----------------------------
+    state_window = joint_params["state_window"]
+
+    encoder = VAEEncoder(
+        input_dim=2,
+        hidden_dim=vae_params["hidden_dim"],
+        z_dim=vae_params["latent_dim"],
+        seq_len=vae_params["vae_seq_len"]
+    ).to(device)
 
     actor = Actor(
-                state_dim = state_dim,
-                z_dim=rl_params['state_dim'],
-                hidden_dim=rl_params['hidden_dim'],
-                action_dim=rl_params['action_dim']
-                ).to(device)
+        state_dim=state_window,
+        z_dim=rl_params["state_dim"],
+        hidden_dim=rl_params["hidden_dim"],
+        action_dim=1
+    ).to(device)
 
     critic = Critic(
-              state_dim=state_dim,
-              z_dim=rl_params['state_dim'],
-              hidden_dim=rl_params['hidden_dim']
-              ).to(device)
+        state_dim=state_window,
+        z_dim=rl_params["state_dim"],
+        hidden_dim=rl_params["hidden_dim"],
+        action_dim=1
+    ).to(device)
 
-    vae_opt = torch.optim.Adam(vae_encoder.parameters(), lr=vae_params['lr'])
+    vae_opt = torch.optim.Adam(encoder.parameters(), lr=vae_params['lr'])
     actor_opt = torch.optim.Adam(actor.parameters(), lr=rl_params['lr'])
     critic_opt = torch.optim.Adam(critic.parameters(), lr=rl_params['lr'])
-    bocpd_cfg, meta = load_RLmodels(load_dir, actor, critic, vae_encoder,
-                                      actor_opt, critic_opt, vae_opt,
-                                      device)
 
+    bocpd_cfg, meta = load_RLmodels(load_dir, actor, critic, encoder,
+                                    actor_opt, critic_opt, vae_opt,
+                                    device)
+
+    actor.eval()
+    encoder.eval()
+
+    # ----------------------------
+    # BOCPD per pair
+    # ----------------------------
     # Extract the hazard rate from the loaded dictionary
     bocpd_hazard_default=bocpd_params['hazard']
     bocpd_hazard = bocpd_cfg.get("bocpd_hazard", bocpd_hazard_default)
-    bocpd = BOCPD(
-                ConstantHazard(bocpd_hazard),
-                StudentT(
-                    mu=bocpd_params['mu'],
-                    kappa=bocpd_params['kappa'],
-                    alpha=bocpd_params['alpha'],
-                    beta=bocpd_params['beta']
-                    )
-                )
 
-    vae_encoder.eval()
-    actor.eval()
-    bocpd.reset_params()
+    bocpd_models = {
+        p: BOCPD(
+            ConstantHazard(bocpd_hazard),
+            StudentT(
+                mu=bocpd_params["mu"],
+                kappa=bocpd_params["kappa"],
+                alpha=bocpd_params["alpha"],
+                beta=bocpd_params["beta"]
+            )
+        )
+        for p in pairs
+    }
 
-    rms = RunningMeanStd()
-    rms_stats = np.load(os.path.join(load_dir, "rms_stats.npz"))
-    # --- Assign back to rms object ---
-    rms.mean = rms_stats["mean"]
-    rms.var = rms_stats["var"]
+    rms = {p: RunningMeanStd() for p in pairs}
+    if use_trained_rms==True:
+      for p in pairs:
+        file_name = f'rms_stats_{p}.npz'
+        rms_stats = np.load(os.path.join(load_dir, file_name))
+        # --- Assign back to rms object ---
+        rms[p].mean = rms_stats["mean"]
+        rms[p].var = rms_stats["var"]
 
-    # action noise base sigma
-    base_action_sigma = joint_params['base_action_sigma']
-    # walkthrough
-    T = min(total_steps, len(data) - 1)
+    cp_weight = rl_params.get("cp_weight", 1.0)           # multiplies reward when change_prob high
+    var_penalty = rl_params.get("var_penalty", 0.25)      # penalty * recent variance
+    dd_penalty = rl_params.get("dd_penalty", 2.0)         # penalty multiplier for drawdown exceed
+    dd_thr = rl_params.get("dd_threshold", 0.10)         # acceptable drawdown before penalty
+    var_window = rl_params.get("var_window", 20)         # window for recent var
+    tc_scale = joint_params.get("tc_scale", 0.3)         # scale for transaction cost (reduce penalty) # CHANGED
 
-    # initialize state: last `state_window` returns
-    state_returns = [0.0]*(state_window-1)
-    state_returns.append(data[0])
-    vae_state_diff = np.array([0.0]*seq_len_for_vae)
-    last_action = 0.0
-
-    # action noise base sigma
-    all_recons = []
-    rewards = []
-    actions = []
-    pnl = []
-    portfolio_returns = []
-    equity_curve = []
-    capital = 1.0
-    cp_probs = []
-    eps = 1e-8
-    cumulative_pnl = 0.0          # track total PnL
+    # ----------------------------
+    # State containers
+    # ----------------------------
+    state_returns = {p: [0.0] * state_window for p in pairs}
+    cp_probs = {p: [] for p in pairs}
+    rt_mle = {p: [] for p in pairs}
+    norm_rets = {p: [] for p in pairs}
+    cumulative_pnl = {p: 0.0 for p in pairs}
+    raw_cum_pnl = {p: 0.0 for p in pairs}
+    peak_raw_pnl = {p: 0.0 for p in pairs}
+    raw_pnl = {p: [] for p in pairs}
+    all_recons = {p: [] for p in pairs}
+    recon_probs = {p: [] for p in pairs}
+    last_action = np.zeros(n_pairs)
+    portfolio_pnl = []
+    results = defaultdict(dict)
     stop_loss_count = 0
-    
-    global_mean = 0.0
-    global_var = 0.0
-    recon_probs = []
-    errors_ch0 = []
-    errors_ch1 = []
 
-    for step in trange(T):
+    # ----------------------------
+    # Evaluation loop
+    # ----------------------------
+    for t in range(min_len - 1):
         # reseed at each step to ensure deterministic behavior
-        step_seed = seed + step + 2000
+        step_seed = seed + t + 2000
         if device.startswith("cuda") and torch.cuda.is_available():
             gen = torch.Generator(device='cuda')
         else:
@@ -159,135 +139,168 @@ def evaluate_loop_rl(
         np.random.seed(step_seed)
         random.seed(step_seed)
         torch.manual_seed(step_seed)
-              
-        cur_ret = data[step]
-        rms.update([cur_ret])
-        global_mean = rms.mean
-        global_var = rms.var
-              
-        # BOCPD update (normalized observation)
-        norm_ret = float((cur_ret - rms.mean) / (math.sqrt(rms.var) + 1e-8))
-        change_prob, _ = bocpd.update(norm_ret)  # float in [0,1]
-        cp_probs.append(change_prob)
-        
-        # build VAE input window
-        seq_start = max(0, step - seq_len_for_vae + 1)
-        seq_rets = data[seq_start: step + 1]
-        cps_seq = cp_probs[seq_start: step + 1] ####
-        if step == 0:
-            cur_dif = data[step]
-        else:
-            cur_dif = data[step] - data[step-1]
-        vae_state_diff = np.append(vae_state_diff, cur_dif)
-        
-        # pad if needed
-        if len(seq_rets) < seq_len_for_vae:
-            pad = np.zeros(seq_len_for_vae - len(seq_rets))
-            seq_rets = np.concatenate([pad, seq_rets])
-            cps_pad = np.zeros(seq_len_for_vae - len(cps_seq)) ####
-            cps_seq = np.concatenate([cps_pad, cps_seq]) ####
-        
-        # form encoder input: (seq_len, input_dim) where input_dim = [norm_ret, change_prob]
-        seq_inp = np.stack([ (seq_rets - rms.mean) / (math.sqrt(rms.var)+1e-8),
-                              cps_seq ], axis=-1)[None, ...]  # batch=1
-        seq_inp_t = torch.tensor(seq_inp, dtype=torch.float32).to(device)
 
-        # VAE forward (no-grad)
-        with torch.no_grad():
-            x_hat, mu, logvar, z_t = vae_encoder(seq_inp_t)
-            recon_np = x_hat.detach().cpu().numpy()[0, :, 0]  # seq_len values
-            recon_cp = x_hat.detach().cpu().numpy()[0, :, 1]
-            # take last timestep reconstruction (corresponds to current idx)
-            recon_last_norm = recon_np[-1]
-            recon_last_denorm = recon_last_norm * math.sqrt(rms.var) + rms.mean
-            all_recons.append(recon_last_denorm)
-            recon_cp_last_norm = recon_cp[-1]
-            recon_probs.append(recon_cp_last_norm)
+        action = np.zeros(n_pairs)
+        reward = np.zeros(n_pairs)
+        pnl = np.zeros(n_pairs)
 
-            inp_ch0 = cur_ret
-            recon_ch0 = recon_last_denorm
-            inp_ch1 = change_prob
-            recon_ch1 = recon_cp_last_norm
-            # accumulate recon errors
-            errors_ch0.append(np.mean((inp_ch0 - recon_ch0)**2))
-            errors_ch1.append(np.mean((inp_ch1 - recon_ch1)**2))
+        step_pnl = 0.0
+        for i, p in enumerate(pairs):
+            cur_ret = data[p][t]
+    
+            norm_ret = rms[p].normalize(cur_ret)
+            cp_prob, cp_flag = bocpd_models[p].update(float(norm_ret))
 
-        # ---- BOCPD-based gating ----
-        noise_scale = 0.05 * (1.0 + 5.0 * change_prob)  # increase noise if break detected
-        # ---- Policy action ----
-        # state vector for policy: flatten last `state_window` normalized returns
-        state_arr = np.array(state_returns[-state_window:])
-        state_norm = (state_arr - rms.mean) / (math.sqrt(rms.var) + 1e-8)
+            cp_probs[p].append(cp_prob)
+            norm_rets[p].append(norm_ret)
 
-        state_t = torch.tensor(state_norm.astype(np.float32))[None, :].to(device)
+            state_returns[p].append(norm_ret)
+            state_returns[p] = state_returns[p][-state_window:]
 
-        # actor forward
-        with torch.no_grad():
-            z_t_det = mu # z_t
-            action_mean = actor(state_t, z_t_det).cpu().numpy().squeeze()
+            # ----------------------------
+            # BUILD STATE VECTOR
+            # ----------------------------
+            state_t = torch.tensor(state_returns[p], dtype=torch.float32)[None, :].to(device)
 
-        # exploration vs deterministic gating by cp-prob
-        if exploration:
-            # live adaptive (adds regime-scaled noise)
-            noise_sigma = base_action_sigma * (1.0 + 5.0 * change_prob) # alpha = 5.0
-            action = action_mean + np.random.normal(scale=noise_sigma, size=action_mean.shape)
-        else:
-            action = action_mean * (1.0 - 0.5 * change_prob) # 0.5 * change_prob
-        action = np.clip(action, -1.0, 1.0)
-        actions.append(action)
-        next_ret = data[step + 1]
+            # ----------------------------
+            # VAE INPUT
+            # ----------------------------
+            if len(norm_rets[p]) < vae_params["vae_seq_len"]:
+                z_detach = torch.zeros(1, rl_params["state_dim"], device=device)
+                action_mean2 = actor(state_t, z_detach) # z_detach is (1, z_dim) from VAE output
+            else:
+                # ----------------------------
+                # VAE forward (NO BACKPROP)
+                # ----------------------------
+                vae_inp = np.stack(
+                    [
+                        norm_rets[p][-vae_params["vae_seq_len"]:],
+                        cp_probs[p][-vae_params["vae_seq_len"]:]
+                    ],
+                    axis=-1
+                )[None, ...]
 
-        eps = 1e-8
-        # reward with transaction cost
-        raw_reward = float(action * (next_ret - cur_ret))
-        reward = raw_reward / (math.sqrt(rms.var) + eps)
-        trans_cost = tc * float(np.abs(action - last_action).sum())
-        reward = reward - trans_cost
-        last_action = action.copy()
-        cumulative_pnl += reward                     # track cumulative profit/loss
+                vae_inp_t = torch.tensor(vae_inp, dtype=torch.float32).to(device)
 
-        # ---------------------------
-        # Stop-loss check
-        # ---------------------------
-        stop_triggered = False
-        if cumulative_pnl <= stop_loss_threshold:
-            reward -= abs(stop_loss_penalty)          # penalize
-            action = 0.0                              # force flat
-            stop_triggered = True
-            stop_loss_count += 1
-            cumulative_pnl = 0.0
-            done_flag = True                          # end evaluation early (optional)
+                with torch.no_grad():
+                    x_hat, mu, _, z_t  = encoder(vae_inp_t)
 
-        portfolio_returns.append(reward)
-        if step == 0:
-            equity_curve.append(1+ reward)
-            pnl.append(reward)
-        else:
-            equity_curve.append(equity_curve[-1]*(1+ reward))
-            pnl.append(equity_curve[-1] - 1)
-        rewards.append(reward)
-        state_returns.append(data[step+1])
+                    #-------------- VAE recon starts------------------------
+                    recon_np = x_hat.detach().cpu().numpy()[0, :, 0]  # seq_len values
+                    recon_cp = x_hat.detach().cpu().numpy()[0, :, 1]
+                    # take last timestep reconstruction (corresponds to current idx)
+                    recon_last_norm = recon_np[-1]
+                    recon_last_denorm = recon_last_norm * math.sqrt(rms[p].var) + rms[p].mean
+                    all_recons[p].append(recon_last_denorm)
+                    recon_cp_last_norm = recon_cp[-1]
+                    recon_probs[p].append(recon_cp_last_norm)
+                    #-------------- VAE recon ends------------------------
+                    # # Fix: Pass action_mu_tensor directly to torch.tanh
+                    mu_detach = mu.detach()
+                    action_scale = 1 #0.3
+                    action_mean2 = actor(state_t, mu_detach) * action_scale
+    
+            action_mean = action_mean2
+    
+            #-------------------------------------------------------------
+            action[i] = action_mean.detach().cpu().numpy().squeeze().item()
+            # ----------------------------
+            # REWARD (MARKET-NEUTRAL)
+            # ----------------------------
+            raw_reward = -action[i] * (rms[p].normalize(data[p][t + 1]) - rms[p].normalize(data[p][t]))
+            pnl[i] = -action[i] * (data[p][t + 1] - data[p][t])
+            raw_cum_pnl[p] += pnl[i]
+            raw_pnl[p].append(raw_reward)
 
-    if stop_loss_count > 0:
-        print(f"Stop-loss triggered for {stop_loss_count} PnLs")
+            # CHANGED: compute recent rolling variance for variance penalty
+            if len(raw_pnl[p]) >= 2:
+                recent_window = max(1, min(var_window, len(raw_pnl[p])))
+                rolling_var = float(np.var(raw_pnl[p][-recent_window:]))
+            else:
+                rolling_var = 1e-8  # fallback
 
-    change_probs, rt_mle, cp_flags = bocpd.results
-    all_recons.append(all_recons[-1])
-    rmse_ch0 = float(np.sqrt(np.mean(errors_ch0)))
-    rmse_ch1 = float(np.sqrt(np.mean(errors_ch1)))
-    print(f"\nRMSE channel0 (spread, denorm): {rmse_ch0:.6f}")
-    print(f"RMSE channel1 (cp prob):        {rmse_ch1:.6f}")
+            # CHANGED: apply cp-weighting, variance penalty, drawdown penalty, and scale transaction cost
+            # cp amplification
+            reward[i] = raw_reward * (1.0 + cp_weight * cp_prob)  # CHANGED: amplify reward when CP high
 
-    print("Evaluation complete.")
+            # drawdown bookkeeping BEFORE applying stop-loss
+            # raw_cum_pnl currently tracks normalized rewards sum
+            # update peak for drawdown calc
+            if raw_cum_pnl[p] > peak_raw_pnl[p]:
+                peak_raw_pnl[p] = raw_cum_pnl[p]
+
+            # compute drawdown as fraction of peak (safe denom)
+            if peak_raw_pnl[p] > 1e-8:
+                cur_dd = (peak_raw_pnl[p] - raw_cum_pnl[p]) / abs(peak_raw_pnl[p])
+            else:
+                cur_dd = 0.0
+
+            # variance penalty (reduces reward when recent variance high)
+            reward[i] = reward[i] - (var_penalty * rolling_var)
+
+            # drawdown penalty (only applied when exceeding threshold)
+            if cur_dd > dd_thr:
+                reward[i] = reward[i] - dd_penalty * (cur_dd - dd_thr)
+
+            # transaction cost: proportional to change in action magnitude
+            tc = joint_params.get('transaction_cost', 0.0)
+            trans_cost = tc * float(np.abs(action[i] - last_action[i]).sum())  # sum if vector action
+            # CHANGED: scale down effective tc to avoid over-penalizing turnover
+            reward[i] = reward[i] - (tc_scale * trans_cost)
+            pnl[i] = pnl[i] - (tc_scale * trans_cost)
+
+            # ----------------------------
+            # STOP-LOSS
+            # ----------------------------
+
+            action_l2 = 0.1 # 0.01 #0.1 # 0.02
+            reward[i] -= action_l2 * (action[i] ** 2)
+
+            step_pnl += pnl[i]
+            cumulative_pnl[p] += pnl[i]
+
+            # STOP-LOSS CHECK
+            stop_triggered = False
+            if cumulative_pnl[p] <= stop_loss_threshold:
+                reward[i] -= abs(stop_loss_penalty)   # penalize hitting stop-loss
+                action[i] = 0.0                         # force close position
+                stop_triggered = True
+                stop_loss_count += 1
+                cumulative_pnl[p] = 0.0
+
+            last_action[i] = action[i]
+            #-------------------------------------------------------------
+
+
+            # ----------------------------------
+            # Store per-pair metrics
+            # ----------------------------------
+            results[p].setdefault("pnl", []).append(raw_reward)
+            results[p].setdefault("position", []).append(action[i])
+            results[p].setdefault("cp_prob", []).append(cp_prob)
+
+        # portfolio_pnl.append(float(step_pnl/n_pairs))
+        portfolio_pnl.append(step_pnl)
+
+    # ===============================
+    # Compute metrics
+    # ===============================
+    for p in pairs:
+        change_probs, rt_mle, cp_flags = bocpd_models[p].results
+        results["change_probs"][p] = change_probs
+        results["rt_mle"][p] = rt_mle
+
+    portfolio_pnl = np.array(portfolio_pnl)
+
+    sharpe_ratio = (np.mean(portfolio_pnl) / (np.std(portfolio_pnl) + 1e-8)) * np.sqrt(252)
+
+    print(f'Evaluation loop: Sharpe Ratio = {sharpe_ratio}')
     metrics = {
-                'change_probs' : np.array(change_probs),
-                'rt_mle' : np.array(rt_mle),
-                'cp_flags' : np.array(cp_flags),
-                'recons' : np.array(all_recons),
-                'actions' : np.array(actions),
-                'portfolio_returns' : np.array(portfolio_returns),
-                'equity_curve' : np.array(equity_curve),
-                'pnl' : np.array(pnl),
-                'rets' : pd.Series(portfolio_returns, index= dates[:len(dates)-1])
+        "portfolio_pnl": portfolio_pnl,
+        "cumulative_pnl": np.cumsum(portfolio_pnl),
+        "sharpe_ratio": sharpe_ratio,
+        "max_drawdown": max_drawdown(portfolio_pnl),
+        "recons": all_recons
     }
-    return metrics
+
+    return metrics, results
