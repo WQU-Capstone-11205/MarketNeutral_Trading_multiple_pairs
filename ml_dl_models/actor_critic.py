@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
 
 # -------------------------
 # Actor-Critic networks (continuous actions)
@@ -23,16 +25,16 @@ class Actor(nn.Module):
         return self.net(x)
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, z_dim, hidden_dim=128):
+    def __init__(self, state_dim, z_dim, action_dim, hidden_dim=128):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(state_dim + z_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
-        )
+        self.fc_state = nn.Linear(state_dim + z_dim, hidden_dim)
+        self.fc_action = nn.Linear(hidden_dim + action_dim, hidden_dim)
+        self.fc_out = nn.Linear(hidden_dim, 1)
 
-    def forward(self, state, z):
-        x = torch.cat([state, z], dim=-1)
-        return self.net(x)
+    def forward(self, state, z, action):
+        h = torch.cat([state, z], dim=-1)
+        h = F.relu(self.fc_state(h))
+        h = torch.cat([h, action], dim=-1)
+        h = F.relu(self.fc_action(h))
+        q = self.fc_out(h)
+        return q
