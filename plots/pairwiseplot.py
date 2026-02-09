@@ -3,6 +3,6 @@ import seaborn as sns
 
 def show_pairwise_relations(pairs):
     plt.figure(figsize=(10,4))
-    sns.pairplot(pair, vars=['coint_pvalue','norm_price_dist','spread_vol','half_life'])
+    sns.pairplot(pairs, vars=['coint_pvalue','norm_price_dist','spread_vol','half_life'])
     plt.suptitle("Pairwise Relationships Between Metrics", y=1.02)
     plt.show()
