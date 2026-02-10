@@ -160,8 +160,8 @@ def train_loop_rl(
         portfolio_pnl = []
         total_actions = {p: [] for p in pairs}
         total_mus = {p: [] for p in pairs}
-        # epoch_actions = {p: [] for p in pairs}
-        # epoch_mus = {p: [] for p in pairs}
+        epoch_actions = {p: [] for p in pairs}
+        epoch_mus = {p: [] for p in pairs}
         last_action = np.zeros(n_pairs)
         vae_loss_accum = 0.0
         vae_update_count = 0
@@ -260,8 +260,9 @@ def train_loop_rl(
                     noise = 0.0
 
                 action[i] = action_mean.detach().cpu().numpy().squeeze().item() + noise
-                # epoch_actions[p].append(action_mean.item())
+                epoch_actions[p].append(action_mean.item())
                 # epoch_mus[p].append(mu.detach().cpu())
+                epoch_mus[p].append(z_detach.cpu())
 
                 # ----------------------------
                 # REWARD (MARKET-NEUTRAL)
@@ -314,8 +315,8 @@ def train_loop_rl(
                 step_pnl += pnl[i]
                 cumulative_pnl[p] += pnl[i]
                 total_actions[p].append(action[i])
-                mu_detach = mu.detach().cpu().numpy().squeeze()
-                mu_mean_detach = mu_detach.mean()
+                # mu_detach = mu.detach().cpu().numpy().squeeze()
+                mu_mean_detach = z_detach.mean()
                 total_mus[p].append(mu_mean_detach) # Removed .item() here
 
                 # STOP-LOSS CHECK
