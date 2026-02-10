@@ -304,12 +304,13 @@ def train_loop_rl(
                     reward[i] = reward[i] - dd_penalty * (cur_dd - dd_thr)
 
                 # transaction cost: proportional to change in action magnitude
-                tc = joint_params.get('transaction_cost', 0.0)
+                tc = joint_params.get("transaction_cost", 0.0)
                 trans_cost = tc * float(np.abs(action[i] - last_action[i]).sum())  # sum if vector action
                 # CHANGED: scale down effective tc to avoid over-penalizing turnover
                 reward[i] = reward[i] - (tc_scale * trans_cost)
 
-                action_l2 = 0.1 # 0.1 #0.01 # 0.2## new
+                # For risk control under regime uncertainty
+                action_l2 = rl_params.get("action_l2", 0.1)
                 reward[i] -= action_l2 * (action[i] ** 2) ## new
 
                 step_pnl += pnl[i]
@@ -349,7 +350,7 @@ def train_loop_rl(
                     )
                     # if change_prob large, upweight recent transitions
                     if cp_flag == 1:
-                        buffers[p].upweight_recent(window=200, multiplier=joint_params['wt_multplier'])
+                        buffers[p].upweight_recent(window=200, multiplier=joint_params["wt_multplier"])
 
             # ----------------------------
             # Update VAE periodically
@@ -404,6 +405,7 @@ def train_loop_rl(
                     actor_loss = -critic(states.squeeze(1), z_batch, pred_actions).mean()
 
                     # CHANGED: optionally add small L2 regularization on policy parameters to avoid collapse (if desired)
+                    # It brings numerical stability when latent states shift
                     if rl_params.get('actor_l2', 0.0) > 0.0:
                         l2_reg = 0.0
                         for param in actor.parameters():
