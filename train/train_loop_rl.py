@@ -147,7 +147,7 @@ def train_loop_rl(
 
         T = min(total_steps, min_len - 1)
 
-        state_returns = {p: [0.0] * state_window for p in pairs}
+        state = {p: [0.0] * state_window for p in pairs}
         cumulative_pnl = {p: 0.0 for p in pairs}
         raw_cum_pnl = {p: 0.0 for p in pairs}
         peak_raw_pnl = {p: 0.0 for p in pairs}
@@ -207,13 +207,13 @@ def train_loop_rl(
                 cp_probs[p].append(cp_prob)
                 norm_rets[p].append(norm_ret)
 
-                state_returns[p].append(norm_ret)
-                state_returns[p] = state_returns[p][-state_window:]
+                state[p].append(norm_ret)
+                state[p] = state[p][-state_window:]
 
                 # ----------------------------
                 # BUILD STATE VECTOR
                 # ----------------------------
-                state_t = torch.tensor(state_returns[p], dtype=torch.float32)[None, :].to(device)
+                state_t = torch.tensor(state[p], dtype=torch.float32)[None, :].to(device)
 
                 # ----------------------------
                 # VAE INPUT
@@ -336,7 +336,7 @@ def train_loop_rl(
                 # STORE TRANSITION
                 # ----------------------------
                 norm_next_state = rms[p].normalize(data[p][t + 1])
-                next_state_vec = state_returns[p][1:] + [norm_next_state]
+                next_state_vec = state[p][1:] + [norm_next_state]
 
                 if mode == 'train':
                     buffers[p].push(
