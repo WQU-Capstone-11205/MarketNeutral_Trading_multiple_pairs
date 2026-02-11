@@ -90,7 +90,7 @@ class BOCPD_tuner(hyperparameter_tuner):
 
             if fold_scores:
                 results.append((cfg, np.mean(fold_scores)))
-                print(f'BOCPD tuning: {cfg} :: {np.mean(fold_scores)}')
+                print(f'BOCPD tuning: {cfg} :: {round(np.mean(fold_scores),3)}')
 
         self.best_bocpd_params = max(results, key=lambda x: x[1])[0]
         print(f'BOCPD tuning complete: {self.best_bocpd_params}')
