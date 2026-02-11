@@ -231,7 +231,7 @@ class VAE_tuner(hyperparameter_tuner):
             if vae_loss < best_loss:
                 best_loss = vae_loss
                 best_cfg = cfg
-            print(f'VAE cfg = {cfg} :: vae loss = {vae_loss}')
+            print(f'VAE cfg = {cfg} :: vae loss = {round(vae_loss,3)}')
 
         print(f'VAE tuning complete: {best_cfg}')
         return best_cfg
