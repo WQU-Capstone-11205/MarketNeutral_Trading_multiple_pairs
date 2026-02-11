@@ -215,9 +215,8 @@ def evaluate_loop_rl(
                     action_mean2 = actor(state_t, mu_detach) * action_scale
     
             action_mean = action_mean2
-    
-            #-------------------------------------------------------------
             action[i] = action_mean.detach().cpu().numpy().squeeze().item()
+            
             # ----------------------------
             # REWARD (MARKET-NEUTRAL)
             # ----------------------------
@@ -267,7 +266,7 @@ def evaluate_loop_rl(
             # STOP-LOSS
             # ----------------------------
 
-            action_l2 = 0.1 # 0.01 #0.1 # 0.02
+            action_l2 = rl_params.get('action_l2', 0.1)
             reward[i] -= action_l2 * (action[i] ** 2)
 
             step_pnl += pnl[i]
@@ -283,8 +282,6 @@ def evaluate_loop_rl(
                 cumulative_pnl[p] = 0.0
 
             last_action[i] = action[i]
-            #-------------------------------------------------------------
-
 
             # ----------------------------------
             # Store per-pair metrics
@@ -308,7 +305,7 @@ def evaluate_loop_rl(
 
     sharpe_ratio = (np.mean(portfolio_pnl) / (np.std(portfolio_pnl) + 1e-8)) * np.sqrt(252)
 
-    print(f'Evaluation loop: Sharpe Ratio = {sharpe_ratio}')
+    print(f'Evaluation loop: Sharpe Ratio = {round(sharpe_ratio,3)}')
     metrics = {
         "portfolio_pnl": portfolio_pnl,
         "cumulative_pnl": np.cumsum(portfolio_pnl),
