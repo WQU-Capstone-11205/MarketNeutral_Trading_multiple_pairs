@@ -119,7 +119,7 @@ class RL_tuner(hyperparameter_tuner):
                     best_score = score
                     best_cfg = (rl_cfg, joint_cfg)
 
-                print(f'RL and Joint CFG = {best_cfg} :: score = {score}')
+                print(f'RL and Joint CFG = {best_cfg} :: score = {round(score,3)}')
 
-        print(f'RL and Joint CFG = {best_cfg} :: score = {score}')
+        print(f'RL and Joint CFG = {best_cfg} :: score = {round(score,3)}')
         return best_cfg
