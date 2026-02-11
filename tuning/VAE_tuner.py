@@ -102,16 +102,13 @@ class VAE_tuner(hyperparameter_tuner):
         vae.train()
 
         for epoch in range(num_epochs):
-            # print(f'epoch = {epoch}')
             train_losses = []
             for p, series in train_spread.items():
                 data = series.values
                 cp_probs = []
                 norm_spread_train = []
-                # print(f'Pair = {p}')
-
+                
                 for t in range(len(data)):
-                    # print(f't = {t}')
                     cur_data = data[t]
                     rms_train[p].update([cur_data])
                     norm_data = rms_train[p].normalize(cur_data)
