@@ -197,10 +197,9 @@ def train_loop_rl(
             # ----------------------------
             for i, p in enumerate(pairs):
                 raw_reward = 0.0
-                cur_ret = data[p][t]
-                rms[p].update([cur_ret])
-                # norm_ret = (cur_ret - rms[p].mean) / (np.sqrt(rms[p].var) + 1e-8)
-                norm_ret = rms[p].normalize(cur_ret)
+                cur_data = data[p][t]
+                rms[p].update([cur_data])
+                norm_ret = rms[p].normalize(cur_data)
 
                 cp_prob, cp_flag = bocpd_models[p].update(float(norm_ret))
 
