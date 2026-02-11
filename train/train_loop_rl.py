@@ -429,7 +429,7 @@ def train_loop_rl(
 
         if mode == 'train':
             avg_policy = total_policy_loss / total_policy_cnt
-            print(f"Epoch {epoch:03d} | recon loss = {avg_recon:.4f} | kl loss = {avg_kl:.4f} | policy loss = {avg_policy:.4f} | Cumulative PnL = {sum(cumulative_pnl.values()):.4f}")
+            print(f"Epoch {epoch:03d} | recon loss = {avg_recon:.3f} | kl loss = {avg_kl:.3f} | policy loss = {avg_policy:.3f} | Cumulative PnL = {sum(cumulative_pnl.values()):.3f}")
 
             # ============================================================
             #   Save models for best Sharpe ratio
@@ -442,7 +442,7 @@ def train_loop_rl(
             if sharpe_ratio > best_train_sharpe + min_delta:
                 best_train_sharpe = sharpe_ratio
                 es_counter = 0  # reset patience counter
-                meta = {"epoch": epoch, "recon loss": (avg_recon), "kl loss": (avg_kl), "policy loss" : (avg_policy)}
+                meta = {"epoch": epoch, "recon loss": (round(avg_recon,3)), "kl loss": (round(avg_kl,3)), "policy loss" : (round(avg_policy,3))}
                 bocpd_cfg = {"bocpd_hazard": bocpd_params["hazard"]}
                 save_RLmodels(save_dir, actor, critic, encoder,
                                 actor_opt, critic_opt, vae_opt,
@@ -456,8 +456,8 @@ def train_loop_rl(
                     stopped_early = True
                     break
         else:
-            print(f"Epoch {epoch:03d} | recon loss = {avg_recon:.4f} | kl loss = {avg_kl:.4f} | Cumulative PnL = {sum(cumulative_pnl.values()):.4f}")
-            meta = {"epoch": epoch, "recon loss": (avg_recon), "kl loss": (avg_kl)}
+            print(f"Epoch {epoch:03d} | recon loss = {avg_recon:.3f} | kl loss = {avg_kl:.3f} | Cumulative PnL = {sum(cumulative_pnl.values()):.3f}")
+            meta = {"epoch": epoch, "recon loss": (round(avg_recon,3)), "kl loss": (round(avg_kl,3))}
             bocpd_cfg = {"bocpd_hazard": bocpd_params["hazard"]}
             save_RLmodels(save_dir, actor, critic, encoder,
                             actor_opt, critic_opt, vae_opt,
