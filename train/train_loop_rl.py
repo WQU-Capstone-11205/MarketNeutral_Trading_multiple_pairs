@@ -152,7 +152,7 @@ def train_loop_rl(
         raw_cum_pnl = {p: 0.0 for p in pairs}
         peak_raw_pnl = {p: 0.0 for p in pairs}
         cp_probs = {p: [] for p in pairs}
-        norm_rets = {p: [] for p in pairs}
+        vae_state = {p: [] for p in pairs}
         raw_pnl = {p: [] for p in pairs}
         stop_loss_count = 0
         total_recon, total_kl = 0, 0
@@ -205,7 +205,7 @@ def train_loop_rl(
                 cp_prob, cp_flag = bocpd_models[p].update(float(norm_ret))
 
                 cp_probs[p].append(cp_prob)
-                norm_rets[p].append(norm_ret)
+                vae_state[p].append(norm_ret)
 
                 state[p].append(norm_ret)
                 state[p] = state[p][-state_window:]
@@ -218,13 +218,13 @@ def train_loop_rl(
                 # ----------------------------
                 # VAE INPUT
                 # ----------------------------
-                if len(norm_rets[p]) < vae_params["vae_seq_len"]:
+                if len(vae_state[p]) < vae_params["vae_seq_len"]:
                     z_detach = torch.zeros(1, rl_params["state_dim"], device=device)
                     action_mean2 = actor(state_t, z_detach) # z_detach is (1, z_dim) from VAE output
                 else:
                     vae_inp = np.stack(
                         [
-                            norm_rets[p][-vae_params["vae_seq_len"]:] ,
+                            vae_state[p][-vae_params["vae_seq_len"]:] ,
                             cp_probs[p][-vae_params["vae_seq_len"]:]
                         ],
                         axis=-1
