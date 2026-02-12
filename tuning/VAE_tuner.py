@@ -210,7 +210,7 @@ class VAE_tuner(hyperparameter_tuner):
 
         return float(np.mean(val_losses))
 
-    def tune(self, spreads, bocpd_cfg, n_trials=10): # 20
+    def tune(self, spreads, bocpd_cfg, n_trials=30): # 20
         best_loss = np.inf
         best_cfg = None
 
