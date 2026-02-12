@@ -40,7 +40,7 @@ class BOCPD_tuner(hyperparameter_tuner):
         results = []
         pairs = list(spreads.keys())
 
-        for cfg in super().sample_from_space(self.bocpd_space, n = 5):
+        for cfg in super().sample_from_space(self.bocpd_space, n = 25):
             fold_scores = []
             
             for train, val in super().walk_forward_splits(spreads, 500, 125, 125):
