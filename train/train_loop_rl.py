@@ -22,7 +22,7 @@ from ml_dl_models.actor_critic import Critic
 from util.weighted_replay_buffer import WeightedReplayBuffer
 from util.eval_strategy import evaluate_strategy
 from util.models_io import save_RLmodels
-from util.seed_random import seed_random
+# from util.seed_random import seed_random
 from util.soft_update import soft_update
 from structural_break.MultiPairBOCPD import MultiPairBOCPD
 
@@ -49,7 +49,7 @@ def train_loop_rl(
     - One BOCPD per pair
     - Shared VAE + Actor-Critic
     """
-    seed_random(seed, device=device)
+    # seed_random(seed, device=device)
     pairs = list(spreads.keys())
     n_pairs = len(pairs)
 
@@ -145,7 +145,7 @@ def train_loop_rl(
 
     for epoch in range(epochs):
         epoch_seed = seed + epoch
-        seed_random(seed + epoch, device=device)
+        # seed_random(seed + epoch, device=device)
 
         T = min(total_steps, min_len - 1)
 
