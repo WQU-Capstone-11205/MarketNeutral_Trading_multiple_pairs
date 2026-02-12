@@ -35,7 +35,9 @@ def evaluate_loop_rl(
     device="cpu",
     stop_loss_threshold=-0.02,
     stop_loss_penalty=0.001,
-    seed: int = 42
+    seed: int = 42,
+    use_bocpd=True,        # For Ablations
+    use_vae=True           # For Ablations
 ):
     seed_random(seed, device=device)
     pairs = list(spreads.keys())
@@ -163,7 +165,10 @@ def evaluate_loop_rl(
             cur_ret = data[p][t]
     
             norm_ret = rms[p].normalize(cur_ret)
-            cp_prob, cp_flag = bocpd_models[p].update(float(norm_ret))
+            if use_bocpd:
+                cp_prob, cp_flag = bocpd_models[p].update(float(norm_ret))
+            else:
+                cp_prob, cp_flag = 0.0, 0
 
             cp_probs[p].append(cp_prob)
             norm_rets[p].append(norm_ret)
@@ -179,40 +184,44 @@ def evaluate_loop_rl(
             # ----------------------------
             # VAE INPUT
             # ----------------------------
-            if len(norm_rets[p]) < vae_params["vae_seq_len"]:
+            if not use_vae:
                 z_detach = torch.zeros(1, rl_params["state_dim"], device=device)
                 action_mean2 = actor(state_t, z_detach) # z_detach is (1, z_dim) from VAE output
             else:
-                # ----------------------------
-                # VAE forward (NO BACKPROP)
-                # ----------------------------
-                vae_inp = np.stack(
-                    [
-                        norm_rets[p][-vae_params["vae_seq_len"]:],
-                        cp_probs[p][-vae_params["vae_seq_len"]:]
-                    ],
-                    axis=-1
-                )[None, ...]
-
-                vae_inp_t = torch.tensor(vae_inp, dtype=torch.float32).to(device)
-
-                with torch.no_grad():
-                    x_hat, mu, _, z_t  = encoder(vae_inp_t)
-
-                    #-------------- VAE recon starts------------------------
-                    recon_np = x_hat.detach().cpu().numpy()[0, :, 0]  # seq_len values
-                    recon_cp = x_hat.detach().cpu().numpy()[0, :, 1]
-                    # take last timestep reconstruction (corresponds to current idx)
-                    recon_last_norm = recon_np[-1]
-                    recon_last_denorm = recon_last_norm * math.sqrt(rms[p].var) + rms[p].mean
-                    all_recons[p].append(recon_last_denorm)
-                    recon_cp_last_norm = recon_cp[-1]
-                    recon_probs[p].append(recon_cp_last_norm)
-                    #-------------- VAE recon ends------------------------
-                    # # Fix: Pass action_mu_tensor directly to torch.tanh
-                    mu_detach = mu.detach()
-                    action_scale = 1 #0.3
-                    action_mean2 = actor(state_t, mu_detach) * action_scale
+                if len(norm_rets[p]) < vae_params["vae_seq_len"]:
+                    z_detach = torch.zeros(1, rl_params["state_dim"], device=device)
+                    action_mean2 = actor(state_t, z_detach) # z_detach is (1, z_dim) from VAE output
+                else:
+                    # ----------------------------
+                    # VAE forward (NO BACKPROP)
+                    # ----------------------------
+                    vae_inp = np.stack(
+                        [
+                            norm_rets[p][-vae_params["vae_seq_len"]:],
+                            cp_probs[p][-vae_params["vae_seq_len"]:]
+                        ],
+                        axis=-1
+                    )[None, ...]
+    
+                    vae_inp_t = torch.tensor(vae_inp, dtype=torch.float32).to(device)
+    
+                    with torch.no_grad():
+                        x_hat, mu, _, z_t  = encoder(vae_inp_t)
+    
+                        #-------------- VAE recon starts------------------------
+                        recon_np = x_hat.detach().cpu().numpy()[0, :, 0]  # seq_len values
+                        recon_cp = x_hat.detach().cpu().numpy()[0, :, 1]
+                        # take last timestep reconstruction (corresponds to current idx)
+                        recon_last_norm = recon_np[-1]
+                        recon_last_denorm = recon_last_norm * math.sqrt(rms[p].var) + rms[p].mean
+                        all_recons[p].append(recon_last_denorm)
+                        recon_cp_last_norm = recon_cp[-1]
+                        recon_probs[p].append(recon_cp_last_norm)
+                        #-------------- VAE recon ends------------------------
+                        # # Fix: Pass action_mu_tensor directly to torch.tanh
+                        mu_detach = mu.detach()
+                        action_scale = 1 #0.3
+                        action_mean2 = actor(state_t, mu_detach) * action_scale
     
             action_mean = action_mean2
             action[i] = action_mean.detach().cpu().numpy().squeeze().item()
@@ -232,9 +241,12 @@ def evaluate_loop_rl(
             else:
                 rolling_var = 1e-8  # fallback
 
-            # CHANGED: apply cp-weighting, variance penalty, drawdown penalty, and scale transaction cost
-            # cp amplification
-            reward[i] = raw_reward * (1.0 + cp_weight * cp_prob)  # CHANGED: amplify reward when CP high
+            if use_bocpd:
+                # CHANGED: apply cp-weighting, variance penalty, drawdown penalty, and scale transaction cost
+                # cp amplification
+                reward[i] = raw_reward * (1.0 + cp_weight * cp_prob)  # CHANGED: amplify reward when CP high
+            else:
+                reward[i] = raw_reward
 
             # drawdown bookkeeping BEFORE applying stop-loss
             # raw_cum_pnl currently tracks normalized rewards sum
