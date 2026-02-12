@@ -40,7 +40,9 @@ def train_loop_rl(
     device="cpu",
     stop_loss_threshold=-0.02,
     stop_loss_penalty=0.001,
-    seed=42
+    seed=42,
+    use_bocpd=True,        # For Ablations
+    use_vae=True           # For Ablations
 ):
     """
     Multi-pair RL training loop with:
@@ -201,7 +203,10 @@ def train_loop_rl(
                 rms[p].update([cur_data])
                 norm_ret = rms[p].normalize(cur_data)
 
-                cp_prob, cp_flag = bocpd_models[p].update(float(norm_ret))
+                if use_bocpd:
+                    cp_prob, cp_flag = bocpd_models[p].update(float(norm_ret))
+                else:
+                    cp_prob, cp_flag = 0.0, 0
 
                 cp_probs[p].append(cp_prob)
                 vae_state[p].append(norm_ret)
@@ -217,44 +222,52 @@ def train_loop_rl(
                 # ----------------------------
                 # VAE INPUT
                 # ----------------------------
-                if len(vae_state[p]) < vae_params["vae_seq_len"]:
+                if not use_vae:
                     z_detach = torch.zeros(1, rl_params["state_dim"], device=device)
-                    action_mean2 = actor(state_t, z_detach) # z_detach is (1, z_dim) from VAE output
+                    action_mean2 = actor(state_t, z_detach)
                 else:
-                    vae_inp = np.stack(
-                        [
-                            vae_state[p][-vae_params["vae_seq_len"]:] ,
-                            cp_probs[p][-vae_params["vae_seq_len"]:]
-                        ],
-                        axis=-1
-                    )[None, ...]
-                    vae_inp_t = torch.tensor(vae_inp, dtype=torch.float32).to(device)
-
-                    x_hat, mu, logvar, z = encoder(vae_inp_t)
-                    vae_loss_val, recon_loss, kl_loss = vae_loss(
-                        vae_inp_t, x_hat, mu, logvar, kl_weight=vae_params["kl_wt"]
-                    )
-                    vae_loss_accum += vae_loss_val
-                    vae_update_count += 1
-
-                    total_recon += recon_loss
-                    total_kl += kl_loss
-
-                    # ----------------------------
-                    # ACTION SELECTION
-                    # ----------------------------
-                    action_scale = 1.0 # 0.3
-                    with torch.no_grad():
-                        z_detach = mu.detach()
-                        action_mean2 = actor(state_t, z_detach) * action_scale # z_detach is (1, z_dim) from VAE output
+                    if len(vae_state[p]) < vae_params["vae_seq_len"]:
+                        z_detach = torch.zeros(1, rl_params["state_dim"], device=device)
+                        action_mean2 = actor(state_t, z_detach) # z_detach is (1, z_dim) from VAE output
+                    else:
+                        vae_inp = np.stack(
+                            [
+                                vae_state[p][-vae_params["vae_seq_len"]:] ,
+                                cp_probs[p][-vae_params["vae_seq_len"]:]
+                            ],
+                            axis=-1
+                        )[None, ...]
+                        vae_inp_t = torch.tensor(vae_inp, dtype=torch.float32).to(device)
+    
+                        x_hat, mu, logvar, z = encoder(vae_inp_t)
+                        vae_loss_val, recon_loss, kl_loss = vae_loss(
+                            vae_inp_t, x_hat, mu, logvar, kl_weight=vae_params["kl_wt"]
+                        )
+                        vae_loss_accum += vae_loss_val
+                        vae_update_count += 1
+    
+                        total_recon += recon_loss
+                        total_kl += kl_loss
+    
+                        # ----------------------------
+                        # ACTION SELECTION
+                        # ----------------------------
+                        action_scale = 1.0 # 0.3
+                        with torch.no_grad():
+                            z_detach = mu.detach()
+                            action_mean2 = actor(state_t, z_detach) * action_scale # z_detach is (1, z_dim) from VAE output
 
                 # action_mean = torch.clamp(action_mean2, -0.7, 0.7)
                 action_mean = action_mean2
 
                 if mode == "train":
-                    # exploration scale increases with change_prob
-                    # alpha=5 scaling
-                    noise = np.random.normal(scale=base_action_sigma * (1.0 + exploration_alpha * np.clip(cp_prob, 0.0, 0.8)))
+                    if use_bocpd:
+                        # exploration scale increases with change_prob
+                        # alpha=5 scaling
+                        noise_scale=base_action_sigma * (1.0 + exploration_alpha * np.clip(cp_prob, 0.0, 0.8))
+                    else:
+                        noise_scale=base_action_sigma
+                    noise = np.random.normal(scale=noise_scale)
                 else:
                     noise = 0.0
 
@@ -281,7 +294,10 @@ def train_loop_rl(
 
                 # CHANGED: apply cp-weighting, variance penalty, drawdown penalty, and scale transaction cost
                 # cp amplification
-                reward[i] = raw_reward * (1.0 + cp_weight * cp_prob)  # CHANGED: amplify reward when CP high
+                if use_bocpd:
+                    reward[i] = raw_reward * (1.0 + cp_weight * cp_prob)  # CHANGED: amplify reward when CP high
+                else:
+                    reward[i] = raw_reward
 
                 # drawdown bookkeeping BEFORE applying stop-loss
                 # raw_cum_pnl currently tracks normalized rewards sum
@@ -338,6 +354,10 @@ def train_loop_rl(
                 next_state_vec = state[p][1:] + [norm_next_state]
 
                 if mode == 'train':
+                    if use_vae:
+                        z_to_store = z_detach.cpu().numpy().astype(np.float32)
+                    else:
+                        z_to_store = np.zeros((1, rl_params["state_dim"]), dtype=np.float32)
                     buffers[p].push(
                         state_t.cpu().numpy().astype(np.float32),
                         np.array([executed_action], dtype=np.float32),
@@ -345,7 +365,7 @@ def train_loop_rl(
                         np.array(next_state_vec).astype(np.float32),
                         stop_triggered,
                         1.0,
-                        z_detach.cpu().numpy().astype(np.float32)
+                        z_to_store
                     )
                     # if change_prob large, upweight recent transitions
                     if cp_flag == 1:
@@ -355,7 +375,8 @@ def train_loop_rl(
             # Update VAE periodically
             # ----------------------------
             if (
-                t % vae_update_every == 0
+                use_vae
+                and t % vae_update_every == 0
                 and vae_update_count > 0
                 and encoder.training
             ):
