@@ -14,7 +14,7 @@ from collections import defaultdict
 
 from metrics.stats import compute_max_drawdown as max_drawdown
 from util.running_mean_std import RunningMeanStd
-from util.seed_random import seed_random
+# from util.seed_random import seed_random
 from structural_break.bocpd import BOCPD
 from structural_break.hazard import ConstantHazard
 from structural_break.distribution import StudentT
@@ -39,7 +39,7 @@ def evaluate_loop_rl(
     use_bocpd=True,        # For Ablations
     use_vae=True           # For Ablations
 ):
-    seed_random(seed, device=device)
+    # seed_random(seed, device=device)
     pairs = list(spreads.keys())
     n_pairs = len(pairs)
 
