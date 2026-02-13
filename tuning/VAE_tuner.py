@@ -32,11 +32,12 @@ class VAE_tuner(hyperparameter_tuner):
         "kl_wt": 0.001
     }
 
-    def __init__(self, custom_vae_space: Dict[str, List[Any]]=None):
+    def __init__(self, custom_vae_space: Dict[str, List[Any]]=None, seed=42):
         """
         Args:
             vae_space: dict of VAE hyperparameter ranges
         """
+        super().__init__(seed)
         self.vae_space = VAE_tuner.default_vae_space.copy()
         if custom_vae_space:
             self.vae_space.update(custom_vae_space)
