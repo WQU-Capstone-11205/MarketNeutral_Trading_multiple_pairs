@@ -50,8 +50,8 @@ def train_loop_rl(
     - Shared VAE + Actor-Critic
     """
     # seed_random(seed, device=device)
-    torch.manual_seed(self.seed)
-    np.random.seed(self.seed)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
     pairs = list(spreads.keys())
     n_pairs = len(pairs)
