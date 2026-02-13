@@ -62,6 +62,9 @@ class VAE_tuner(hyperparameter_tuner):
             Mean validation VAE loss
         """
 
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+
         train_pairs = list(train_spread.keys())
 
         # ----------------------------
