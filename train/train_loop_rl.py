@@ -270,7 +270,9 @@ def train_loop_rl(
                         noise_scale=base_action_sigma * (1.0 + exploration_alpha * np.clip(cp_prob, 0.0, 0.8))
                     else:
                         noise_scale=base_action_sigma
-                    noise = np.random.normal(scale=noise_scale)
+                    np_rng = np.random.default_rng(seed)
+                    noise = np_rng.normal(scale=noise_scale)
+                    # noise = np.random.normal(scale=noise_scale)
                 else:
                     noise = 0.0
 
