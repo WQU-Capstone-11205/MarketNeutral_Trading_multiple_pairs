@@ -71,12 +71,13 @@ class RL_tuner(hyperparameter_tuner):
     }
 
     def __init__(self, custom_rl_space: Dict[str, List[Any]]=None,
-                 custom_joint_space: Dict[str, List[Any]]=None):
+                 custom_joint_space: Dict[str, List[Any]]=None, seed=42):
         """
         Args:
             custom_rl_space: dict of RL hyperparameter ranges
             custom_joint_space: dict for joint tuning of BOCPD, VAE, and RL
         """
+        super().__init__(seed)
         self.rl_space = RL_tuner.default_rl_space.copy()
         if custom_rl_space:
             self.rl_space.update(custom_rl_space)
