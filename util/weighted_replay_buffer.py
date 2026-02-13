@@ -21,7 +21,7 @@ class WeightedReplayBuffer:
         # --- Deterministic RNG when seed is provided ---
         if seed is not None:
             np_rng = np.random.default_rng(seed) #np.random.RandomState(seed)
-        else 
+        else:
             np_rng = np.random  # original nondeterministic behavior
 
         weights = np.array([t.weight for t in self.buffer], dtype=np.float64)
