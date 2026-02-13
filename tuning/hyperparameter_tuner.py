@@ -4,8 +4,10 @@ from typing import Dict, List, Any
 from itertools import product
 
 class hyperparameter_tuner:
-    def __init__(self):
-        pass
+    def __init__(self, seed: int = 42):
+        self.seed = seed
+        self.rng = random.Random(seed)       # python RNG
+        self.np_rng = np.random.default_rng(seed)  # numpy RNG
 
     def gridsearch_from_space(self, space):
         keys = list(space.keys())
