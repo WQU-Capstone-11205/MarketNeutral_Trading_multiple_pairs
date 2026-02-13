@@ -26,11 +26,12 @@ class BOCPD_tuner(hyperparameter_tuner):
         "beta": 0.8
     }
 
-    def __init__(self, custom_bocpd_space: Dict[str, List[Any]]=None):
+    def __init__(self, custom_bocpd_space: Dict[str, List[Any]]=None, seed=42):
         """
         Args:
             bocpd_space: dict of BOCPD hyperparameter ranges
         """
+        super().__init__(seed)
         self.bocpd_space = BOCPD_tuner.default_bocpd_space.copy()
         if custom_bocpd_space:
             self.bocpd_space.update(custom_bocpd_space)
