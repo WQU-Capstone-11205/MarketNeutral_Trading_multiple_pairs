@@ -20,9 +20,9 @@ class WeightedReplayBuffer:
     def sample(self, batch_size, seed=42):
         # --- Deterministic RNG when seed is provided ---
         if seed is not None:
-            np_rng = np.random.default_rng(seed) #np.random.RandomState(seed)
+            self.np_rng = np.random.default_rng(seed) #np.random.RandomState(seed)
         else:
-            np_rng = np.random  # original nondeterministic behavior
+            self.np_rng = np.random  # original nondeterministic behavior
 
         weights = np.array([t.weight for t in self.buffer], dtype=np.float64)
 
@@ -31,7 +31,7 @@ class WeightedReplayBuffer:
         else:
             probs = weights / weights.sum()
 
-        idx = rng.choice(
+        idx = self.np_rng.choice(
             len(self.buffer),
             size=min(batch_size, len(self.buffer)),
             replace=False,
