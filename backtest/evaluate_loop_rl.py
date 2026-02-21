@@ -36,6 +36,7 @@ def evaluate_loop_rl(
     stop_loss_threshold=-0.02,
     stop_loss_penalty=0.001,
     seed: int = 42,
+    ablation_flag=False,
     use_bocpd=True,        # For Ablations
     use_vae=True           # For Ablations
 ):
@@ -243,9 +244,9 @@ def evaluate_loop_rl(
             else:
                 rolling_var = 1e-8  # fallback
 
-            if use_bocpd:
-                # CHANGED: apply cp-weighting, variance penalty, drawdown penalty, and scale transaction cost
-                # cp amplification
+            # CHANGED: apply cp-weighting, variance penalty, drawdown penalty, and scale transaction cost
+            # cp amplification
+            if (not ablation_flag):
                 reward[i] = raw_reward * (1.0 + cp_weight * cp_prob)  # CHANGED: amplify reward when CP high
             else:
                 reward[i] = raw_reward
@@ -293,7 +294,7 @@ def evaluate_loop_rl(
                 action[i] = 0.0                         # force close position
                 stop_triggered = True
                 stop_loss_count += 1
-                cumulative_pnl[p] = 0.0
+                # cumulative_pnl[p] = 0.0
 
             last_action[i] = action[i]
 
