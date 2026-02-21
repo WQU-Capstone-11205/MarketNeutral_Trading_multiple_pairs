@@ -41,6 +41,7 @@ def train_loop_rl(
     stop_loss_threshold=-0.02,
     stop_loss_penalty=0.001,
     seed=42,
+    ablation_flag=False,
     use_bocpd=True,        # For Ablations
     use_vae=True           # For Ablations
 ):
@@ -172,10 +173,10 @@ def train_loop_rl(
         vae_update_count = 0
 
         # Freeze VAE after warmup
-        if mode == "train" and epoch >= 2:
-            encoder.eval()
-            for param in encoder.parameters():
-                param.requires_grad = False
+        # if mode == "train" and epoch >= 2:
+        #     encoder.eval()
+        #     for param in encoder.parameters():
+        #         param.requires_grad = False
 
         for t in range(T):
             # reseed per-step for any sampling/noise used during step
@@ -246,8 +247,8 @@ def train_loop_rl(
                         vae_loss_val, recon_loss, kl_loss = vae_loss(
                             vae_inp_t, x_hat, mu, logvar, kl_weight=vae_params["kl_wt"]
                         )
-                        vae_loss_accum += vae_loss_val
-                        vae_update_count += 1
+                        vae_loss_accum = vae_loss_accum + vae_loss_val
+                        vae_update_count = vae_update_count + 1
     
                         total_recon += recon_loss
                         total_kl += kl_loss
@@ -257,7 +258,8 @@ def train_loop_rl(
                         # ----------------------------
                         action_scale = 1.0 # 0.3
                         with torch.no_grad():
-                            z_detach = mu.detach()
+                            z_detach = z.detach()
+                            # z_detach = mu.detach()
                             action_mean2 = actor(state_t, z_detach) * action_scale # z_detach is (1, z_dim) from VAE output
 
                 # action_mean = torch.clamp(action_mean2, -0.7, 0.7)
@@ -270,9 +272,9 @@ def train_loop_rl(
                         noise_scale=base_action_sigma * (1.0 + exploration_alpha * np.clip(cp_prob, 0.0, 0.8))
                     else:
                         noise_scale=base_action_sigma
-                    np_rng = np.random.default_rng(seed)
-                    noise = np_rng.normal(scale=noise_scale)
-                    # noise = np.random.normal(scale=noise_scale)
+                    # np_rng = np.random.default_rng(seed)
+                    # noise = np_rng.normal(scale=noise_scale)
+                    noise = np.random.normal(scale=noise_scale)
                 else:
                     noise = 0.0
 
@@ -299,7 +301,7 @@ def train_loop_rl(
 
                 # CHANGED: apply cp-weighting, variance penalty, drawdown penalty, and scale transaction cost
                 # cp amplification
-                if use_bocpd:
+                if (not ablation_flag):
                     reward[i] = raw_reward * (1.0 + cp_weight * cp_prob)  # CHANGED: amplify reward when CP high
                 else:
                     reward[i] = raw_reward
@@ -347,7 +349,7 @@ def train_loop_rl(
                     reward[i] -= abs(stop_loss_penalty)   # penalize hitting stop-loss
                     action[i] = 0.0                         # force close position
                     stop_triggered = True
-                    cumulative_pnl[p] = 0.0
+                    # cumulative_pnl[p] = 0.0
                     stop_loss_count += 1
 
                 last_action[i] = action[i]
@@ -382,15 +384,17 @@ def train_loop_rl(
             if (
                 use_vae
                 and t % vae_update_every == 0
-                and vae_update_count > 0
-                and encoder.training
+                # and vae_update_count > 0
+                and mode == "train"
+                # and encoder.training
             ):
                 vae_opt.zero_grad()
-                (vae_loss_accum / vae_update_count).backward()
+                # (vae_loss_accum / vae_update_count).backward()
+                vae_loss_accum.backward()
                 vae_opt.step()
 
-            vae_loss_accum = 0.0
-            vae_update_count = 0
+                vae_loss_accum = 0.0
+                vae_update_count = 0
 
             # ----------------------------
             # UPDATE POLICY
