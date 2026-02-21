@@ -452,7 +452,8 @@ def train_loop_rl(
                     soft_update(target_actor, actor, tau=rl_params['tau'])
                     soft_update(target_critic, critic, tau=rl_params['tau'])
 
-            portfolio_pnl.append(float(step_pnl/n_pairs))
+            # portfolio_pnl.append(float(step_pnl/n_pairs))
+            portfolio_pnl.append(step_pnl)
 
         avg_recon = total_recon / (T * n_pairs)
         avg_kl = total_kl / (T * n_pairs)
