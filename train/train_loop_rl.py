@@ -393,8 +393,8 @@ def train_loop_rl(
                 vae_loss_accum.backward()
                 vae_opt.step()
 
-                vae_loss_accum = 0.0
-                vae_update_count = 0
+            vae_loss_accum = 0.0
+            vae_update_count = 0
 
             # ----------------------------
             # UPDATE POLICY
