@@ -87,7 +87,7 @@ class RL_tuner(hyperparameter_tuner):
         self.best_rl_params = RL_tuner.best_rl_params.copy()
         self.best_joint_params = RL_tuner.best_joint_params.copy()
 
-    def tune(self, spreads, bocpd_cfg, vae_cfg, n_trials=5): #25
+    def tune(self, spreads, bocpd_cfg, vae_cfg, n_trials=10): #25
         best_score = -np.inf
         best_cfg = None
 
