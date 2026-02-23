@@ -49,7 +49,7 @@ class VAE_tuner(hyperparameter_tuner):
         val_spread: dict,
         bocpd_cfg: dict,
         vae_cfg: dict,
-        num_epochs: int = 1, #5
+        num_epochs: int = 5,
         device: str = "cpu"
     ):
         """
