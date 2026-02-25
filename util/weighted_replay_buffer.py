@@ -27,9 +27,11 @@ class WeightedReplayBuffer:
         weights = np.array([t.weight for t in self.buffer], dtype=np.float64)
 
         if weights.sum() <= 0:
+            print('Normal probs')
             probs = np.ones(len(weights)) / len(weights)
         else:
             probs = weights / weights.sum()
+            print('Weighted probs')
 
         idx = self.np_rng.choice(
             len(self.buffer),
