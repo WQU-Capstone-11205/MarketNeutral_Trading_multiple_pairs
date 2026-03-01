@@ -388,6 +388,7 @@ def train_loop_rl(
                 # and vae_update_count > 0
                 and mode == "train"
                 # and encoder.training
+                and len(vae_state[p]) >= vae_params["vae_seq_len"]
             ):
                 vae_opt.zero_grad()
                 # (vae_loss_accum / vae_update_count).backward()
