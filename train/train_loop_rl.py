@@ -375,9 +375,9 @@ def train_loop_rl(
                         z_to_store
                     )
                     # if change_prob large, upweight recent transitions
-                    # if cp_flag == 1:
-                    #     buffers[p].upweight_recent(window=(3*vae_params["vae_seq_len"]), multiplier=joint_params["wt_multplier"])
-                    #     # buffers[p].upweight_recent(window=200, multiplier=joint_params["wt_multplier"])
+                    if cp_flag == 1:
+                        buffers[p].upweight_recent(window=(3*vae_params["vae_seq_len"]), multiplier=joint_params["wt_multplier"])
+                        # buffers[p].upweight_recent(window=200, multiplier=joint_params["wt_multplier"])
 
             # ----------------------------
             # Update VAE periodically
