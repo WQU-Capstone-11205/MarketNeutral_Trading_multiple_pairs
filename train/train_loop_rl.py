@@ -374,6 +374,8 @@ def train_loop_rl(
                         1.0,
                         z_to_store
                     )
+
+                    print(f'{p} : cp_flag = {cp_flag} && cp_prob = {cp_prob}')
                     # if change_prob large, upweight recent transitions
                     # if cp_flag == 1:
                     #     buffers[p].upweight_recent(window=(3*vae_params["vae_seq_len"]), multiplier=joint_params["wt_multplier"])
