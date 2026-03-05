@@ -10,7 +10,8 @@ import pandas as pd
 # BOCPD implementation
 # -------------------------
 class BOCPD:
-    def __init__(self, hazard, distribution):
+    # def __init__(self, hazard, distribution):
+    def __init__(self, hazard, distribution, cp_threshold=0.5):
         """
         Initialize the BOCPD model.
         
@@ -28,6 +29,7 @@ class BOCPD:
         self.hazard = hazard
         self.distribution = distribution
         self.T = 0
+        self.cp_threshold = cp_threshold
         self.beliefs = np.zeros((1, 2))
         self.beliefs[0, 0] = 1.0
         self.change_probs = []
@@ -58,7 +60,9 @@ class BOCPD:
         pi_t = self.distribution.pdf(x)
 
         # Calculate H(r_{t-1})
-        h = self.hazard(self.rt)
+        # h = self.hazard(self.rt)
+        r = np.arange(self.T + 1)        # all possible run lengths
+        h = self.hazard(r)
 
         # Calculate Growth Probability (4 in Algorithm 1)
         self.beliefs[1 : self.T + 2, 1] = self.beliefs[: self.T + 1, 0] * pi_t * (1 - h)
@@ -67,7 +71,10 @@ class BOCPD:
         self.beliefs[0, 1] = (self.beliefs[: self.T + 1, 0] * pi_t * h).sum()
 
         # Determine Run length Distribution (7 in Algorithm 1)
-        self.beliefs[:, 1] = self.beliefs[:, 1] / self.beliefs[:, 1].sum()
+        # self.beliefs[:, 1] = self.beliefs[:, 1] / self.beliefs[:, 1].sum()
+        total = self.beliefs[:, 1].sum()
+        if total > 0:
+            self.beliefs[:, 1] /= total
 
         # Update sufficient statistics (8 in Algorithm 8)
         self.distribution.update_params(x)
@@ -77,12 +84,19 @@ class BOCPD:
         self.T += 1
 
         # Update results
-        curr_rt = self.rt[0]
-        cp_flag = 1 if ((len(self.rt_mle) > 0) and (curr_rt < self.rt_mle[-1])) else 0
+        # curr_rt = self.rt[0]
+        # cp_flag = 1 if ((len(self.rt_mle) > 0) and (curr_rt < self.rt_mle[-1])) else 0
+        curr_rt = np.argmax(self.beliefs[:, 0])
+        change_prob = self.beliefs[0, 0]
+        cp_flag = int(change_prob > self.cp_threshold)
+
         self.cp_flags.append(cp_flag)
         self.rt_mle.append(curr_rt)
-        change_prob = self.beliefs.T[0][curr_rt]
-        self.change_probs.append(self.beliefs.T[0][curr_rt])
+        
+        # change_prob = self.beliefs.T[0][curr_rt]
+        # self.change_probs.append(self.beliefs.T[0][curr_rt])
+        
+        self.change_probs.append(change_prob)
         return change_prob, cp_flag
 
     @property
