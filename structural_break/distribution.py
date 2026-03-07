@@ -65,7 +65,8 @@ class StudentT(Distribution):
         self.betaT = np.concatenate(
             [
                 self.beta0,
-                (self.kappaT + (self.kappaT * (x - self.muT) ** 2) / (2 * (self.kappaT + 1))),
+                # (self.kappaT + (self.kappaT * (x - self.muT) ** 2) / (2 * (self.kappaT + 1))),
+                (self.betaT + (self.kappaT * (x - self.muT) ** 2) / (2 * (self.kappaT + 1))),
             ]
         )
         self.muT = np.concatenate([self.mu0, (self.kappaT * self.muT + x) / (self.kappaT + 1)])
