@@ -58,7 +58,7 @@ class BOCPD:
 
         # Evaluate Predictive Probability (3 in Algorithm 1)
         pi_t = self.distribution.pdf(x)
-        print(pi_t)
+        # print(pi_t)
         # print("pi_t shape:", pi_t.shape)
         
         # Calculate H(r_{t-1})
