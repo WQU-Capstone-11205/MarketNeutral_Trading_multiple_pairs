@@ -27,21 +27,34 @@ class StudentT(Distribution):
     """
 
     def __init__(self, mu=0, kappa=1, alpha=1, beta=1):
-        self.mu0 = np.array([mu])
-        self.kappa0 = np.array([kappa])
-        self.alpha0 = np.array([alpha])
-        self.beta0 = np.array([beta])
+        # self.mu0 = np.array([mu])
+        # self.kappa0 = np.array([kappa])
+        # self.alpha0 = np.array([alpha])
+        # self.beta0 = np.array([beta])
+        self.mu0 = mu
+        self.kappa0 = kappa
+        self.alpha0 = alpha
+        self.beta0 = beta
         # We need the following lines to prevent "outside defined warning"
-        self.muT = self.mu0.copy()
-        self.kappaT = self.kappa0.copy()
-        self.alphaT = self.alpha0.copy()
-        self.betaT = self.beta0.copy()
+        # self.muT = self.mu0.copy()
+        # self.kappaT = self.kappa0.copy()
+        # self.alphaT = self.alpha0.copy()
+        # self.betaT = self.beta0.copy()
+        self.muT = np.array([self.mu0])
+        self.kappaT = np.array([self.kappa0])
+        self.alphaT = np.array([self.alpha0])
+        self.betaT = np.array([self.beta0])
 
     def reset_params(self):
-        self.muT = self.mu0.copy()
-        self.kappaT = self.kappa0.copy()
-        self.alphaT = self.alpha0.copy()
-        self.betaT = self.beta0.copy()
+        # self.muT = self.mu0.copy()
+        # self.kappaT = self.kappa0.copy()
+        # self.alphaT = self.alpha0.copy()
+        # self.betaT = self.beta0.copy()
+        self.muT = np.array([self.mu0])
+        self.kappaT = np.array([self.kappa0])
+        self.alphaT = np.array([self.alpha0])
+        self.betaT = np.array([self.beta0])
+
 
     def pdf(self, x):
         """ Probability Density Function
