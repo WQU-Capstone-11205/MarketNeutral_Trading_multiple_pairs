@@ -65,11 +65,19 @@ class StudentT(Distribution):
         #     df=2 * self.alphaT,
         #     scale=np.sqrt(self.betaT * (self.kappaT + 1) / (self.alphaT * self.kappaT)),
         # )
+        # return stats.t.pdf(
+        #     x, 
+        #     loc=self.muT[-1],          # use only the last/current run length
+        #     df=2 * self.alphaT[-1], 
+        #     scale=np.sqrt(self.betaT[-1] * (self.kappaT[-1] + 1) / (self.alphaT[-1] * self.kappaT[-1]))
+        # )
+        scale = np.sqrt(self.betaT * (self.kappaT + 1) / (self.alphaT * self.kappaT))
+    
         return stats.t.pdf(
-            x, 
-            loc=self.muT[-1],          # use only the last/current run length
-            df=2 * self.alphaT[-1], 
-            scale=np.sqrt(self.betaT[-1] * (self.kappaT[-1] + 1) / (self.alphaT[-1] * self.kappaT[-1]))
+            x,
+            df=2 * self.alphaT,
+            loc=self.muT,
+            scale=scale
         )
 
     def update_params(self, x):
@@ -95,7 +103,23 @@ class StudentT(Distribution):
         # self.kappaT = np.concatenate([np.array([self.kappa0]), self.kappaT + 1])
         # # self.alphaT = np.concatenate([self.alpha0, self.alphaT + 0.5])
         # self.alphaT = np.concatenate([np.array([self.alpha0]), self.alphaT + 0.5])
-        self.muT = (self.kappaT * self.muT + x) / (self.kappaT + 1)
-        self.kappaT = self.kappaT + 1
-        self.alphaT = self.alphaT + 0.5
-        self.betaT = self.betaT + (self.kappaT * (x - self.muT) ** 2) / (2 * (self.kappaT + 1))
+
+        # self.muT = (self.kappaT * self.muT + x) / (self.kappaT + 1)
+        # self.kappaT = self.kappaT + 1
+        # self.alphaT = self.alphaT + 0.5
+        # self.betaT = self.betaT + (self.kappaT * (x - self.muT) ** 2) / (2 * (self.kappaT + 1))
+        
+        muT0 = self.mu0
+        kappaT0 = self.kappa0
+        alphaT0 = self.alpha0
+        betaT0 = self.beta0
+    
+        muT = (self.kappaT * self.muT + x) / (self.kappaT + 1)
+        kappaT = self.kappaT + 1
+        alphaT = self.alphaT + 0.5
+        betaT = self.betaT + (self.kappaT * (x - self.muT) ** 2) / (2 * (self.kappaT + 1))
+    
+        self.muT = np.concatenate(([muT0], muT))
+        self.kappaT = np.concatenate(([kappaT0], kappaT))
+        self.alphaT = np.concatenate(([alphaT0], alphaT))
+        self.betaT = np.concatenate(([betaT0], betaT))
