@@ -87,9 +87,9 @@ class BOCPD:
 
         # New addition
         if self.T % 50 == 0:
-        print("t:", self.T,
-              "run_length:", np.argmax(self.beliefs[:,0]),
-              "cp_prob:", self.beliefs[0,0])
+            print("t:", self.T,
+                  "run_length:", np.argmax(self.beliefs[:,0]),
+                  "cp_prob:", self.beliefs[0,0])
     
 
         # Update results
