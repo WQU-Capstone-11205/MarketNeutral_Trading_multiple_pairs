@@ -271,7 +271,8 @@ class SP500PairSpread:
                     continue
 
                 hedge_ratio = pair_data[first].mean() / pair_data[second].mean()
-                spread = pair_data[first] - hedge_ratio * pair_data[second]
+                # spread = pair_data[first] - hedge_ratio * pair_data[second]
+                spread = pair_data[first] - pair_data[second]
 
                 df[f'{first}-{second}'] = spread
                 df_spread = df.dropna(axis=1)
