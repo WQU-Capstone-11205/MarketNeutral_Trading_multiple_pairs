@@ -77,11 +77,15 @@ class StudentT(Distribution):
         """
         self.betaT = np.concatenate(
             [
-                self.beta0,
+                # self.beta0,
+                np.array([self.beta0]),
                 # (self.kappaT + (self.kappaT * (x - self.muT) ** 2) / (2 * (self.kappaT + 1))),
                 (self.betaT + (self.kappaT * (x - self.muT) ** 2) / (2 * (self.kappaT + 1))),
             ]
         )
-        self.muT = np.concatenate([self.mu0, (self.kappaT * self.muT + x) / (self.kappaT + 1)])
-        self.kappaT = np.concatenate([self.kappa0, self.kappaT + 1])
-        self.alphaT = np.concatenate([self.alpha0, self.alphaT + 0.5])
+        # self.muT = np.concatenate([self.mu0, (self.kappaT * self.muT + x) / (self.kappaT + 1)])
+        self.muT = np.concatenate([np.array([self.mu0]), (self.kappaT * self.muT + x) / (self.kappaT + 1)])
+        # self.kappaT = np.concatenate([self.kappa0, self.kappaT + 1])
+        self.kappaT = np.concatenate([np.array([self.kappa0]), self.kappaT + 1])
+        # self.alphaT = np.concatenate([self.alpha0, self.alphaT + 0.5])
+        self.alphaT = np.concatenate([np.array([self.alpha0]), self.alphaT + 0.5])
