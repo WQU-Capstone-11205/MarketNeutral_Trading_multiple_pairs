@@ -21,9 +21,10 @@ class ConstantHazard(Hazard):
         Returns:
           p: Changepoint Probabilities(np.ndarray with shape = r.shape)
         """
-        if isinstance(r, np.ndarray):
-            shape = r.shape
-        else:
-            shape = 1
+        # if isinstance(r, np.ndarray):
+        #     shape = r.shape
+        # else:
+        #     shape = 1
 
-        return np.ones(shape) / self._lambda
+        # return np.ones(shape) / self._lambda
+        return np.ones_like(r, dtype=float) / self._lambda
