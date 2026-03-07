@@ -85,6 +85,13 @@ class BOCPD:
         self._shift_belief_matrix()
         self.T += 1
 
+        # New addition
+        if self.T % 50 == 0:
+        print("t:", self.T,
+              "run_length:", np.argmax(self.beliefs[:,0]),
+              "cp_prob:", self.beliefs[0,0])
+    
+
         # Update results
         # curr_rt = self.rt[0]
         # cp_flag = 1 if ((len(self.rt_mle) > 0) and (curr_rt < self.rt_mle[-1])) else 0
