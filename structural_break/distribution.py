@@ -114,10 +114,21 @@ class StudentT(Distribution):
         alphaT0 = self.alpha0
         betaT0 = self.beta0
     
-        muT = (self.kappaT * self.muT + x) / (self.kappaT + 1)
-        kappaT = self.kappaT + 1
-        alphaT = self.alphaT + 0.5
-        betaT = self.betaT + (self.kappaT * (x - self.muT) ** 2) / (2 * (self.kappaT + 1))
+        # muT = (self.kappaT * self.muT + x) / (self.kappaT + 1)
+        # kappaT = self.kappaT + 1
+        # alphaT = self.alphaT + 0.5
+        # betaT = self.betaT + (self.kappaT * (x - self.muT) ** 2) / (2 * (self.kappaT + 1))
+
+        mu_prev = self.muT
+        kappa_prev = self.kappaT
+        alpha_prev = self.alphaT
+        beta_prev = self.betaT
+        
+        muT = (kappa_prev * mu_prev + x) / (kappa_prev + 1)
+        kappaT = kappa_prev + 1
+        alphaT = alpha_prev + 0.5
+        betaT = beta_prev + (kappa_prev * (x - mu_prev) ** 2) / (2 * (kappa_prev + 1))
+
     
         self.muT = np.concatenate(([muT0], muT))
         self.kappaT = np.concatenate(([kappaT0], kappaT))
