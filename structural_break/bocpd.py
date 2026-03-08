@@ -83,12 +83,15 @@ class BOCPD:
         self.distribution.kappaT[0] = self.distribution.kappa0
         self.distribution.alphaT[0] = self.distribution.alpha0
         self.distribution.betaT[0] = self.distribution.beta0
+
+        # Update internal state
+        self._shift_belief_matrix()
         
         # Update sufficient statistics (8 in Algorithm 8)
         self.distribution.update_params(x)
 
-        # Update internal state
-        self._shift_belief_matrix()
+        # # Update internal state
+        # self._shift_belief_matrix()
         self.T += 1
 
         # New addition
