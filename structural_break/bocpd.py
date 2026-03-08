@@ -100,8 +100,8 @@ class BOCPD:
         #           "run_length:", np.argmax(self.beliefs[:,0]),
         #           "cp_prob:", self.beliefs[0,0])
 
-        if self.T % 50 == 0:
-            print("pi_t len:", len(pi_t))
+        # if self.T % 50 == 0:
+        #     print("pi_t len:", len(pi_t))
     
 
         # Update results
