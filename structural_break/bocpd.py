@@ -77,7 +77,13 @@ class BOCPD:
         total = self.beliefs[:, 1].sum()
         if total > 0:
             self.beliefs[:, 1] /= total
-
+        
+        # Reset stats for r = 0 (new changepoint hypothesis)
+        self.distribution.muT[0] = self.distribution.mu0
+        self.distribution.kappaT[0] = self.distribution.kappa0
+        self.distribution.alphaT[0] = self.distribution.alpha0
+        self.distribution.betaT[0] = self.distribution.beta0
+        
         # Update sufficient statistics (8 in Algorithm 8)
         self.distribution.update_params(x)
 
