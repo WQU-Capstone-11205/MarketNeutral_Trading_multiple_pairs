@@ -11,7 +11,7 @@ import pandas as pd
 # -------------------------
 class BOCPD:
     # def __init__(self, hazard, distribution):
-    def __init__(self, hazard, distribution, cp_threshold=0.2):
+    def __init__(self, hazard, distribution, cp_threshold=0.02):
         """
         Initialize the BOCPD model.
         
