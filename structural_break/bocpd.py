@@ -10,124 +10,200 @@ import pandas as pd
 # BOCPD implementation
 # -------------------------
 class BOCPD:
-    # def __init__(self, hazard, distribution):
-    def __init__(self, hazard, distribution, cp_threshold=0.02):
-        """
-        Initialize the BOCPD model.
-        
-        Args:
-            hazard: A callable function returning the hazard probability H(r) for a given run length.
-            distribution: A distribution object with pdf() and update_params() methods.
-        
-        Initializes internal variables:
-            T: Current time step
-            beliefs: Matrix representing the run length posterior probabilities
-            change_probs: List of change probabilities
-            cp_flags: List of changepoint flags
-            rt_mle: List of most likely run lengths
-        """
+    def __init__(self, hazard, distribution):
         self.hazard = hazard
         self.distribution = distribution
         self.T = 0
-        self.cp_threshold = cp_threshold
         self.beliefs = np.zeros((1, 2))
         self.beliefs[0, 0] = 1.0
+        self.prev_rt = -1
+        self.curr_rt = 0
         self.change_probs = []
         self.cp_flags = []
         self.rt_mle = []
 
     def reset_params(self):
-        # Reset the model to its initial state
         self.T = 0
         self.beliefs = np.zeros((1, 2))
         self.beliefs[0, 0] = 1.0
 
     def _expand_belief_matrix(self):
-        # Expand the belief matrix for a new time step
-        # Adds a row for the next run length probabilities
         rows = np.zeros((1, 2))
         self.beliefs = np.concatenate((self.beliefs, rows), axis=0)
 
     def _shift_belief_matrix(self):
-        # Moves the new probabilities to the prior column and clears the next column for updates
         self.beliefs[:, 0] = self.beliefs[:, 1]
         self.beliefs[:, 1] = 0.0
 
     def update(self, x):
         self._expand_belief_matrix()
 
-        # Evaluate Predictive Probability (3 in Algorithm 1)
+        # Evaluate Predictive Probability (3 in Algortihm 1)
         pi_t = self.distribution.pdf(x)
-        # print(pi_t)
-        # print("pi_t shape:", pi_t.shape)
-        
+
         # Calculate H(r_{t-1})
         # h = self.hazard(self.rt)
-        r = np.arange(self.T + 1)        # all possible run lengths
-        h = self.hazard(r)
+        h = self.hazard(np.arange(self.T + 1))
 
         # Calculate Growth Probability (4 in Algorithm 1)
         self.beliefs[1 : self.T + 2, 1] = self.beliefs[: self.T + 1, 0] * pi_t * (1 - h)
 
         # Calculate Changepoint Probabilities (5 in Algorithm 1)
+        cp_contrib = self.beliefs[:self.T+1,0] * pi_t * h
+        curr_cp_probs = cp_contrib / cp_contrib.sum()
+        change_prob = curr_cp_probs[0]
+        self.change_probs.append(change_prob)
         self.beliefs[0, 1] = (self.beliefs[: self.T + 1, 0] * pi_t * h).sum()
-
-        # Determine Run length Distribution (7 in Algorithm 1)
-        # self.beliefs[:, 1] = self.beliefs[:, 1] / self.beliefs[:, 1].sum()
-        total = self.beliefs[:, 1].sum()
-        if total > 0:
-            self.beliefs[:, 1] /= total
         
-        # Reset stats for r = 0 (new changepoint hypothesis)
-        self.distribution.muT[0] = self.distribution.mu0
-        self.distribution.kappaT[0] = self.distribution.kappa0
-        self.distribution.alphaT[0] = self.distribution.alpha0
-        self.distribution.betaT[0] = self.distribution.beta0
-
-        # Update internal state
-        self._shift_belief_matrix()
+        # Determine Run length Distribution (7 in Algorithm 1)
+        self.beliefs[:, 1] = self.beliefs[:, 1] / self.beliefs[:, 1].sum()
         
         # Update sufficient statistics (8 in Algorithm 8)
         self.distribution.update_params(x)
 
-        # # Update internal state
-        # self._shift_belief_matrix()
+        # Update internal state
+        self._shift_belief_matrix()
         self.T += 1
-
-        # New addition
-        # if self.T % 50 == 0:
-        #     print("t:", self.T,
-        #           "run_length:", np.argmax(self.beliefs[:,0]),
-        #           "cp_prob:", self.beliefs[0,0])
-
-        # if self.T % 50 == 0:
-        #     print("pi_t len:", len(pi_t))
-    
-
-        # Update results
-        # curr_rt = self.rt[0]
-        # cp_flag = 1 if ((len(self.rt_mle) > 0) and (curr_rt < self.rt_mle[-1])) else 0
-        curr_rt = np.argmax(self.beliefs[:, 0])
-        change_prob = self.beliefs[0, 0]
-        cp_flag = int(change_prob > self.cp_threshold)
-
+        cp_flag = 0
+        self.rt_mle.append(self.curr_rt)
+        self.curr_rt += 1
+        if self.rt < self.prev_rt:
+            cp_flag = 1
+            self.curr_rt = 0
         self.cp_flags.append(cp_flag)
-        self.rt_mle.append(curr_rt)
-        
-        # change_prob = self.beliefs.T[0][curr_rt]
-        # self.change_probs.append(self.beliefs.T[0][curr_rt])
-        
-        self.change_probs.append(change_prob)
+        self.prev_rt = self.rt
+
         return change_prob, cp_flag
 
     @property
-    def results(self):
-        return self.change_probs, self.rt_mle, self.cp_flags
-
-    @property
     def rt(self):
-        return np.where(self.beliefs[:, 0] == self.beliefs[:, 0].max())[0]
+        # return np.where(self.beliefs[:, 0] == self.beliefs[:, 0].max())[0]
+        return np.argmax(self.beliefs[:, 0])
 
     @property
     def belief(self):
         return self.beliefs[:, 0]
+
+
+# class BOCPD:
+#     # def __init__(self, hazard, distribution):
+#     def __init__(self, hazard, distribution, cp_threshold=0.02):
+#         """
+#         Initialize the BOCPD model.
+        
+#         Args:
+#             hazard: A callable function returning the hazard probability H(r) for a given run length.
+#             distribution: A distribution object with pdf() and update_params() methods.
+        
+#         Initializes internal variables:
+#             T: Current time step
+#             beliefs: Matrix representing the run length posterior probabilities
+#             change_probs: List of change probabilities
+#             cp_flags: List of changepoint flags
+#             rt_mle: List of most likely run lengths
+#         """
+#         self.hazard = hazard
+#         self.distribution = distribution
+#         self.T = 0
+#         self.cp_threshold = cp_threshold
+#         self.beliefs = np.zeros((1, 2))
+#         self.beliefs[0, 0] = 1.0
+#         self.change_probs = []
+#         self.cp_flags = []
+#         self.rt_mle = []
+
+#     def reset_params(self):
+#         # Reset the model to its initial state
+#         self.T = 0
+#         self.beliefs = np.zeros((1, 2))
+#         self.beliefs[0, 0] = 1.0
+
+#     def _expand_belief_matrix(self):
+#         # Expand the belief matrix for a new time step
+#         # Adds a row for the next run length probabilities
+#         rows = np.zeros((1, 2))
+#         self.beliefs = np.concatenate((self.beliefs, rows), axis=0)
+
+#     def _shift_belief_matrix(self):
+#         # Moves the new probabilities to the prior column and clears the next column for updates
+#         self.beliefs[:, 0] = self.beliefs[:, 1]
+#         self.beliefs[:, 1] = 0.0
+
+#     def update(self, x):
+#         self._expand_belief_matrix()
+
+#         # Evaluate Predictive Probability (3 in Algorithm 1)
+#         pi_t = self.distribution.pdf(x)
+#         # print(pi_t)
+#         # print("pi_t shape:", pi_t.shape)
+        
+#         # Calculate H(r_{t-1})
+#         # h = self.hazard(self.rt)
+#         r = np.arange(self.T + 1)        # all possible run lengths
+#         h = self.hazard(r)
+
+#         # Calculate Growth Probability (4 in Algorithm 1)
+#         self.beliefs[1 : self.T + 2, 1] = self.beliefs[: self.T + 1, 0] * pi_t * (1 - h)
+
+#         # Calculate Changepoint Probabilities (5 in Algorithm 1)
+#         self.beliefs[0, 1] = (self.beliefs[: self.T + 1, 0] * pi_t * h).sum()
+
+#         # Determine Run length Distribution (7 in Algorithm 1)
+#         # self.beliefs[:, 1] = self.beliefs[:, 1] / self.beliefs[:, 1].sum()
+#         total = self.beliefs[:, 1].sum()
+#         if total > 0:
+#             self.beliefs[:, 1] /= total
+        
+#         # Reset stats for r = 0 (new changepoint hypothesis)
+#         self.distribution.muT[0] = self.distribution.mu0
+#         self.distribution.kappaT[0] = self.distribution.kappa0
+#         self.distribution.alphaT[0] = self.distribution.alpha0
+#         self.distribution.betaT[0] = self.distribution.beta0
+
+#         # Update internal state
+#         self._shift_belief_matrix()
+        
+#         # Update sufficient statistics (8 in Algorithm 8)
+#         self.distribution.update_params(x)
+
+#         # # Update internal state
+#         # self._shift_belief_matrix()
+#         self.T += 1
+
+#         # New addition
+#         # if self.T % 50 == 0:
+#         #     print("t:", self.T,
+#         #           "run_length:", np.argmax(self.beliefs[:,0]),
+#         #           "cp_prob:", self.beliefs[0,0])
+
+#         # if self.T % 50 == 0:
+#         #     print("pi_t len:", len(pi_t))
+    
+
+#         # Update results
+#         # curr_rt = self.rt[0]
+#         # cp_flag = 1 if ((len(self.rt_mle) > 0) and (curr_rt < self.rt_mle[-1])) else 0
+#         curr_rt = np.argmax(self.beliefs[:, 0])
+#         change_prob = self.beliefs[0, 0]
+#         cp_flag = int(change_prob > self.cp_threshold)
+
+#         self.cp_flags.append(cp_flag)
+#         self.rt_mle.append(curr_rt)
+        
+#         # change_prob = self.beliefs.T[0][curr_rt]
+#         # self.change_probs.append(self.beliefs.T[0][curr_rt])
+        
+#         self.change_probs.append(change_prob)
+#         return change_prob, cp_flag
+
+#     @property
+#     def results(self):
+#         return self.change_probs, self.rt_mle, self.cp_flags
+
+#     @property
+#     def rt(self):
+#         return np.where(self.beliefs[:, 0] == self.beliefs[:, 0].max())[0]
+
+#     @property
+#     def belief(self):
+#         return self.beliefs[:, 0]
