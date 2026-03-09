@@ -76,6 +76,10 @@ class BOCPD:
         return change_prob, cp_flag
 
     @property
+    def results(self):
+        return self.change_probs, self.rt_mle, self.cp_flags
+    
+    @property
     def rt(self):
         # return np.where(self.beliefs[:, 0] == self.beliefs[:, 0].max())[0]
         return np.argmax(self.beliefs[:, 0])
