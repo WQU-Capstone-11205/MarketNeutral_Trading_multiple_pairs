@@ -208,8 +208,8 @@ def train_loop_rl(
                 norm_ret = rms[p].normalize(cur_data)
 
                 if use_bocpd:
-                    # cp_prob, cp_flag = bocpd_models[p].update(float(norm_ret))
-                    cp_prob, cp_flag = bocpd_models[p].update(float(cur_data))
+                    cp_prob, cp_flag = bocpd_models[p].update(float(norm_ret))
+                    # cp_prob, cp_flag = bocpd_models[p].update(float(cur_data))
                 else:
                     cp_prob, cp_flag = 0.0, 0
 
